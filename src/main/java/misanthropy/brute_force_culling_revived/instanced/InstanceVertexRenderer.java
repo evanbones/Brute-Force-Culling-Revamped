@@ -1,5 +1,6 @@
 package misanthropy.brute_force_culling_revived.instanced;
 
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexFormat;
@@ -9,7 +10,6 @@ import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.NotNull;
-import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL31;
 
 import java.nio.FloatBuffer;
@@ -41,14 +41,17 @@ public class InstanceVertexRenderer implements AutoCloseable {
     }
 
     public void init(Consumer<FloatBuffer> buffer) {
+        int previousVao = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_VERTEX_ARRAY_BINDING);
         bindVertexArray();
         mainAttrib.bind();
         mainAttrib.init(buffer);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
-        unbindVertexArray();
+        GlStateManager._glBindBuffer(org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER, 0);
+        RenderSystem.glBindVertexArray(() -> previousVao);
     }
 
     public void bind() {
+        GlStateManager._glBindBuffer(org.lwjgl.opengl.GL15.GL_ELEMENT_ARRAY_BUFFER, 0);
+
         RenderSystem.AutoStorageIndexBuffer autoStorageIndexBuffer = RenderSystem.getSequentialBuffer(this.mode);
         this.indexType = autoStorageIndexBuffer.type();
         autoStorageIndexBuffer.bind(this.indexCount);
@@ -56,15 +59,19 @@ public class InstanceVertexRenderer implements AutoCloseable {
 
     public void addInstanceAttrib(Consumer<FloatBuffer> consumer) {
         if (!updating) {
+            int previousVao = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_VERTEX_ARRAY_BINDING);
+            bindVertexArray();
             update.bind();
             updating = true;
+            RenderSystem.glBindVertexArray(() -> previousVao);
+            GlStateManager._glBindBuffer(org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER, 0);
         }
         update.addAttrib(consumer);
         instanceCount++;
     }
 
     public void unbind() {
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+        GlStateManager._glBindBuffer(org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER, 0);
     }
 
     public void enableVertexAttribArray() {
@@ -81,10 +88,6 @@ public class InstanceVertexRenderer implements AutoCloseable {
         RenderSystem.glBindVertexArray(() -> this.arrayObjectId);
     }
 
-    public static void unbindVertexArray() {
-        RenderSystem.glBindVertexArray(() -> 0);
-    }
-
     public void drawWithShader(@NotNull ShaderInstance shader) {
         if (!RenderSystem.isOnRenderThread()) {
             RenderSystem.recordRenderCall(() -> this._drawWithShader(shader));
@@ -94,7 +97,6 @@ public class InstanceVertexRenderer implements AutoCloseable {
     }
 
     private void _drawWithShader(@NotNull ShaderInstance shader) {
-
         int drawInstanceCount = this.instanceCount;
         this.instanceCount = 0;
         this.updating = false;
@@ -102,6 +104,8 @@ public class InstanceVertexRenderer implements AutoCloseable {
         if (this.indexCount == 0 || drawInstanceCount == 0) return;
 
         RenderSystem.assertOnRenderThread();
+
+        int previousVao = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_VERTEX_ARRAY_BINDING);
 
         for (int i = 0; i < SAMPLER_NAMES.length; ++i) {
             shader.setSampler(SAMPLER_NAMES[i], RenderSystem.getShaderTexture(i));
@@ -130,6 +134,7 @@ public class InstanceVertexRenderer implements AutoCloseable {
 
         bindVertexArray();
         bind();
+        update.bind();
         enableVertexAttribArray();
         shader.apply();
 
@@ -138,7 +143,10 @@ public class InstanceVertexRenderer implements AutoCloseable {
         shader.clear();
         disableVertexAttribArray();
         unbind();
-        unbindVertexArray();
+
+        GlStateManager._glBindBuffer(org.lwjgl.opengl.GL15.GL_ELEMENT_ARRAY_BUFFER, 0);
+
+        RenderSystem.glBindVertexArray(() -> previousVao);
     }
 
     @Override
