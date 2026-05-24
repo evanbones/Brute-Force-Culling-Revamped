@@ -34,35 +34,67 @@ public class SodiumSectionAsyncUtil {
     private static @Nullable VisibleChunkCollector shadowCollector;
     private static final Semaphore shouldUpdate = new Semaphore(0);
 
+    private static final Object LOCK = new Object();
+    private static volatile int generation = 0;
+
     public static boolean renderingEntities;
     public static boolean needSyncRebuild;
 
     public static void fromSectionManager(Long2ReferenceMap<RenderSection> sections, Level world) {
-        SodiumSectionAsyncUtil.occlusionCuller = new OcclusionCuller(sections, world);
+        synchronized (LOCK) {
+            SodiumSectionAsyncUtil.occlusionCuller = new OcclusionCuller(sections, world);
+        }
+    }
+
+    public static void reset() {
+        synchronized (LOCK) {
+            generation++;
+            collector = null;
+            shadowCollector = null;
+            viewport = null;
+            shadowViewport = null;
+            occlusionCuller = null;
+            needSyncRebuild = false;
+            shouldUpdate.drainPermits();
+        }
     }
 
     public static void asyncSearchRebuildSection() {
         shouldUpdate.acquireUninterruptibly();
 
-        if (CullingStateManager.needPauseRebuild() || occlusionCuller == null) {
+        int currentGeneration;
+        OcclusionCuller culler;
+
+        synchronized (LOCK) {
+            currentGeneration = generation;
+            culler = occlusionCuller;
+        }
+
+        if (CullingStateManager.needPauseRebuild() || culler == null) {
             return;
         }
-        if (CullingStateManager.enabledShader() && shadowViewport != null) {
+
+        VisibleChunkCollector sColl = null;
+        Viewport localShadowViewport = shadowViewport;
+
+        if (CullingStateManager.enabledShader() && localShadowViewport != null) {
             frame++;
             CullingStateManager.useOcclusionCulling = false;
-            VisibleChunkCollector sColl = new AsynchronousChunkCollector(frame);
-            occlusionCuller.findVisible(sColl, shadowViewport, shadowSearchDistance, shadowUseOcclusionCulling, frame);
-            SodiumSectionAsyncUtil.shadowCollector = sColl;
+            sColl = new AsynchronousChunkCollector(frame);
+            culler.findVisible(sColl, localShadowViewport, shadowSearchDistance, shadowUseOcclusionCulling, frame);
             CullingStateManager.useOcclusionCulling = true;
         }
 
-        if (viewport != null) {
+        VisibleChunkCollector mainColl = null;
+        boolean localNeedSyncRebuild = false;
+        Viewport localViewport = viewport;
+
+        if (localViewport != null) {
             frame++;
-            VisibleChunkCollector mainColl = CullingStateManager.checkCulling ?
+            mainColl = CullingStateManager.checkCulling ?
                     new DebugChunkCollector(frame) : new AsynchronousChunkCollector(frame);
 
-            occlusionCuller.findVisible(mainColl, viewport, searchDistance, useOcclusionCulling, frame);
-            SodiumSectionAsyncUtil.collector = mainColl;
+            culler.findVisible(mainColl, localViewport, searchDistance, useOcclusionCulling, frame);
 
             ChunkCullingMap chunkMap = CullingStateManager.CHUNK_CULLING_MAP;
             if (chunkMap != null) {
@@ -72,32 +104,53 @@ public class SodiumSectionAsyncUtil {
             Map<ChunkUpdateType, ArrayDeque<RenderSection>> rebuildList = mainColl.getRebuildLists();
             for (ArrayDeque<RenderSection> queue : rebuildList.values()) {
                 if (!queue.isEmpty()) {
-                    needSyncRebuild = true;
+                    localNeedSyncRebuild = true;
                     break;
                 }
+            }
+        }
+
+        synchronized (LOCK) {
+            if (currentGeneration == generation) {
+                SodiumSectionAsyncUtil.collector = mainColl;
+                SodiumSectionAsyncUtil.shadowCollector = sColl;
+                SodiumSectionAsyncUtil.needSyncRebuild = localNeedSyncRebuild;
             }
         }
     }
 
     public static void pauseAsync() {
-        SodiumSectionAsyncUtil.collector = null;
-        SodiumSectionAsyncUtil.shadowCollector = null;
-    }
-
-    public static void update(Viewport viewport, float dist, boolean culling) {
-        if (CullingStateManager.renderingShader()) {
-            SodiumSectionAsyncUtil.shadowViewport = viewport;
-            SodiumSectionAsyncUtil.shadowSearchDistance = dist;
-            SodiumSectionAsyncUtil.shadowUseOcclusionCulling = culling;
-        } else {
-            SodiumSectionAsyncUtil.viewport = viewport;
-            SodiumSectionAsyncUtil.searchDistance = dist;
-            SodiumSectionAsyncUtil.useOcclusionCulling = culling;
+        synchronized (LOCK) {
+            SodiumSectionAsyncUtil.collector = null;
+            SodiumSectionAsyncUtil.shadowCollector = null;
         }
     }
 
-    public static @Nullable VisibleChunkCollector getChunkCollector() { return collector; }
-    public static @Nullable VisibleChunkCollector getShadowCollector() { return shadowCollector; }
+    public static void update(Viewport viewport, float dist, boolean culling) {
+        synchronized (LOCK) {
+            if (CullingStateManager.renderingShader()) {
+                SodiumSectionAsyncUtil.shadowViewport = viewport;
+                SodiumSectionAsyncUtil.shadowSearchDistance = dist;
+                SodiumSectionAsyncUtil.shadowUseOcclusionCulling = culling;
+            } else {
+                SodiumSectionAsyncUtil.viewport = viewport;
+                SodiumSectionAsyncUtil.searchDistance = dist;
+                SodiumSectionAsyncUtil.useOcclusionCulling = culling;
+            }
+        }
+    }
+
+    public static @Nullable VisibleChunkCollector getChunkCollector() {
+        synchronized (LOCK) {
+            return collector;
+        }
+    }
+
+    public static @Nullable VisibleChunkCollector getShadowCollector() {
+        synchronized (LOCK) {
+            return shadowCollector;
+        }
+    }
 
     public static void shouldUpdate() {
         if (shouldUpdate.availablePermits() < 1) {
@@ -111,7 +164,9 @@ public class SodiumSectionAsyncUtil {
         private static final EnumMap<ChunkUpdateType, ArrayDeque<RenderSection>> EMPTY_LIST = new EnumMap<>(ChunkUpdateType.class);
 
         static {
-            for (ChunkUpdateType type : ChunkUpdateType.values()) EMPTY_LIST.put(type, new ArrayDeque<>());
+            for (ChunkUpdateType type : ChunkUpdateType.values()) {
+                EMPTY_LIST.put(type, new ArrayDeque<>());
+            }
         }
 
         private boolean sent;

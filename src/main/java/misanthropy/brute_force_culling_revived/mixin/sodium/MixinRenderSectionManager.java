@@ -1,4 +1,4 @@
-package misanthropy.brute_force_culling_revived.mixin.sodium; // TODO: Optimize
+package misanthropy.brute_force_culling_revived.mixin.sodium;
 
 import it.unimi.dsi.fastutil.longs.Long2ReferenceMap;
 import me.jellysquid.mods.sodium.client.gl.device.CommandList;
@@ -32,11 +32,18 @@ public abstract class MixinRenderSectionManager {
     @Final
     private Long2ReferenceMap<RenderSection> sectionByPosition;
 
-    @Shadow(remap = false) private @NotNull SortedRenderLists renderLists;
+    @Shadow(remap = false)
+    private @NotNull SortedRenderLists renderLists;
 
     @Inject(method = "<init>", at = @At("TAIL"))
     private void init(ClientLevel world, int renderDistance, CommandList commandList, CallbackInfo ci) {
+        SodiumSectionAsyncUtil.reset();
         SodiumSectionAsyncUtil.fromSectionManager(this.sectionByPosition, world);
+    }
+
+    @Inject(method = "destroy", at = @At("HEAD"), remap = false)
+    private void onDestroy(CallbackInfo ci) {
+        SodiumSectionAsyncUtil.reset();
     }
 
     @Inject(method = "isSectionVisible", at = @At(value = "RETURN"), remap = false, locals = LocalCapture.CAPTURE_FAILHARD, cancellable = true)
