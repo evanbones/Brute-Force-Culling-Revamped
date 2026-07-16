@@ -37,6 +37,7 @@ public abstract class RenderSectionManagerMixin {
 
     @Inject(method = "isSectionVisible", at = @At(value = "RETURN"), remap = false, cancellable = true)
     private void onIsSectionVisible(int x, int y, int z, CallbackInfoReturnable<Boolean> cir) {
+        if (CullingStateManager.renderingShader()) return;
         if (!EffectiveConfig.shouldCullChunk()) return;
 
         RenderSection section = this.sectionByPosition.get(SectionPos.asLong(x, y, z));

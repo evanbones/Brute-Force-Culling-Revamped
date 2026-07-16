@@ -26,6 +26,9 @@ dependencies {
 
     // Sodium
     modCompileOnly "net.caffeinemc:sodium-fabric:${sodium_version}"
+
+    // Iris
+    modCompileOnly "maven.modrinth:iris:${iris_version}-fabric"
 }
 
 loom {

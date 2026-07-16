@@ -12,11 +12,9 @@ import com.evandev.brute_force_culling.mixin.accessor.LevelRenderAccessor;
 import com.evandev.brute_force_culling.mixin.accessor.MinecraftAccessor;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import com.mojang.math.Axis;
-import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -38,9 +36,6 @@ import org.lwjgl.system.Checks;
 import java.io.IOException;
 import java.util.function.Consumer;
 
-import static org.lwjgl.opengl.GL11.GL_TEXTURE;
-import static org.lwjgl.opengl.GL30.*;
-
 /**
  * Central orchestrator for the GPU depth-pyramid occlusion culling pipeline. Owns the culling
  * maps, the depth pyramid render targets/shaders, the offset frustum, and per-frame state.
@@ -50,7 +45,6 @@ public class CullingStateManager {
     public static final int DEPTH_SIZE = 5;
     public static final LifeTimer<Entity> visibleEntity = new LifeTimer<>();
     public static final LifeTimer<BlockPos> visibleBlock = new LifeTimer<>();
-    private static final Int2IntOpenHashMap SHADER_DEPTH_BUFFER_ID = new Int2IntOpenHashMap();
     public static volatile EntityCullingMap ENTITY_CULLING_MAP = null;
     public static volatile ChunkCullingMap CHUNK_CULLING_MAP = null;
     public static Matrix4f VIEW_MATRIX = new Matrix4f();
@@ -138,6 +132,16 @@ public class CullingStateManager {
 
     public static void init() {
         RenderSystem.recordRenderCall(CullingStateManager::initShader);
+
+        if (ModIntegrationUtil.hasIris()) {
+            try {
+                SHADER_LOADER = (ShaderLoader) Class.forName("com.evandev.brute_force_culling.culling.util.IrisLoaderImpl")
+                        .getDeclaredConstructor()
+                        .newInstance();
+            } catch (Exception e) {
+                Constants.LOG.error("Failed to load IrisLoaderImpl", e);
+            }
+        }
     }
 
     private static void initShader() {
@@ -168,8 +172,6 @@ public class CullingStateManager {
             entityMap.cleanup();
             ENTITY_CULLING_MAP = null;
         }
-
-        SHADER_DEPTH_BUFFER_ID.clear();
     }
 
     public static int mapChunkY(double posY) {
@@ -180,6 +182,8 @@ public class CullingStateManager {
 
     public static boolean shouldRenderChunk(IRenderSectionVisibility section, boolean checkForChunk) {
         if (section == null) return false;
+
+        if (renderingShader()) return true;
 
         final ChunkCullingMap map = CHUNK_CULLING_MAP;
         if (map == null) return true;
@@ -219,6 +223,8 @@ public class CullingStateManager {
     }
 
     public static boolean shouldSkipBlockEntity(BlockEntity blockEntity, AABB aabb, BlockPos pos) {
+        if (renderingShader()) return false;
+
         blockCount++;
 
         final Vec3 camPos = CAMERA.getPosition();
@@ -258,6 +264,8 @@ public class CullingStateManager {
     }
 
     public static boolean shouldSkipEntity(Entity entity) {
+        if (renderingShader()) return false;
+
         entityCount++;
         if (entity instanceof Player || entity.isCurrentlyGlowing()) return false;
         if (entity.distanceToSqr(CAMERA.getPosition()) < 4.0) return false;
@@ -454,22 +462,8 @@ public class CullingStateManager {
             int depthTexture = mc.getMainRenderTarget().getDepthTextureId();
             ShaderLoader loader = SHADER_LOADER;
             if (loader != null && loader.enabledShader()) {
-                int fboId = loader.getFrameBufferID();
-                if (!SHADER_DEPTH_BUFFER_ID.containsKey(fboId)) {
-                    RenderSystem.assertOnRenderThreadOrInit();
-                    GlStateManager._glBindFramebuffer(GL_FRAMEBUFFER, fboId);
-                    int[] attachmentObjectType = new int[1];
-                    glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, attachmentObjectType);
-
-                    if (attachmentObjectType[0] == GL_TEXTURE) {
-                        int[] depthTextureID = new int[1];
-                        glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, depthTextureID);
-                        depthTexture = depthTextureID[0];
-                        SHADER_DEPTH_BUFFER_ID.put(fboId, depthTexture);
-                    }
-                } else {
-                    depthTexture = SHADER_DEPTH_BUFFER_ID.get(fboId);
-                }
+                int shaderDepthTexture = loader.getDepthTextureID();
+                if (shaderDepthTexture != -1) depthTexture = shaderDepthTexture;
             }
 
             MAIN_DEPTH_TEXTURE = depthTexture;

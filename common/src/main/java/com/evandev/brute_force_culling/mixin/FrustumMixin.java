@@ -18,7 +18,8 @@ public abstract class FrustumMixin {
 
     @Inject(method = "isVisible", at = @At(value = "RETURN"), cancellable = true)
     public void afterVisible(AABB aabb, CallbackInfoReturnable<Boolean> cir) {
-        if (!cir.getReturnValue() || !CullingStateManager.applyFrustum || !EffectiveConfig.shouldCullChunk()) {
+        if (!cir.getReturnValue() || !CullingStateManager.applyFrustum || !EffectiveConfig.shouldCullChunk()
+                || CullingStateManager.renderingShader()) {
             return;
         }
         double sizeX = aabb.maxX - aabb.minX;

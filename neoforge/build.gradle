@@ -46,6 +46,9 @@ dependencies {
 
     // Sodium
     compileOnly "net.caffeinemc:sodium-neoforge-mod:${sodium_version}"
+
+    // Iris
+    compileOnly "maven.modrinth:iris:${iris_version}-neoforge"
 }
 
 publishMods {
