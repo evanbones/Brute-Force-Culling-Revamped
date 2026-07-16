@@ -1,0 +1,29 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.evandev.brute_force_culling.mixin",
+  "compatibilityLevel": "JAVA_18",
+  "mixins": [
+  ],
+  "client": [
+    "BlockEntityRenderMixin",
+    "EntityRenderMixin",
+    "FrustumMixin",
+    "GameRendererMixin",
+    "InactiveProfilerMixin",
+    "LevelRenderMixin",
+    "MinecraftMixin",
+    "RenderChunkMixin",
+    "RenderSystemMixin",
+    "ShaderInstanceMixin",
+    "WindowMixin",
+    "accessor.FrustumAccessor",
+    "accessor.LevelRenderAccessor",
+    "accessor.MinecraftAccessor"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
+

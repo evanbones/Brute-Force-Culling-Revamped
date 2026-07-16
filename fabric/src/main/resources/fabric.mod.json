@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${description}",
+  "authors": [
+    "${mod_author}"
+  ],
+  "contact": {
+    "homepage": "https://github.com/evanbones/Brute-Force-Culling",
+    "sources": "https://github.com/evanbones/Brute-Force-Culling"
+  },
+  "license": "${license}",
+  "icon": "${mod_id}.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.evandev.brute_force_culling.BruteForceCulling"
+    ],
+    "client": [
+      "com.evandev.brute_force_culling.client.BruteForceCullingClient"
+    ],
+    "modmenu": [
+      "com.evandev.brute_force_culling.compat.ModMenuIntegration"
+    ],
+    "fabric-datagen": [
+      "com.evandev.brute_force_culling.datagen.TemplateDataGenerator"
+    ]
+  },
+  "mixins": [
+    "${mod_id}.mixins.json",
+    "${mod_id}.fabric.mixins.json",
+    "${mod_id}.sodium.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.14",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}",
+    "java": ">=21",
+    "yet_another_config_lib_v3": ">=${yacl_version}"
+  }
+}
