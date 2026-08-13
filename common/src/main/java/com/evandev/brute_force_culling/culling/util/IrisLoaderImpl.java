@@ -10,10 +10,6 @@ import net.minecraft.client.Minecraft;
 
 import java.lang.reflect.Field;
 
-/**
- * Only classloaded via reflection from {@code CullingStateManager.init()} when Iris is present,
- * so it is safe for this class to reference Iris types directly.
- */
 public class IrisLoaderImpl implements ShaderLoader {
     private static Field renderTargetsField;
 
@@ -39,6 +35,33 @@ public class IrisLoaderImpl implements ShaderLoader {
         }
 
         return -1;
+    }
+
+    @Override
+    public int getFrameBufferID() {
+        var pipelineOptional = Iris.getPipelineManager().getPipeline();
+        if (pipelineOptional.isPresent()) {
+            WorldRenderingPipeline pipeline = pipelineOptional.get();
+            if (pipeline instanceof IrisRenderingPipeline irisPipeline) {
+                try {
+                    Field field = IrisRenderingPipeline.class.getDeclaredField("sodiumTerrainPipeline");
+                    field.setAccessible(true);
+                    Object sodiumTerrainPipeline = field.get(irisPipeline);
+                    if (sodiumTerrainPipeline != null) {
+                        Field fbField = sodiumTerrainPipeline.getClass().getDeclaredField("terrainSolidFramebuffer");
+                        fbField.setAccessible(true);
+                        Object glFramebuffer = fbField.get(sodiumTerrainPipeline);
+                        if (glFramebuffer != null) {
+                            Field idField = glFramebuffer.getClass().getDeclaredField("id");
+                            idField.setAccessible(true);
+                            return idField.getInt(glFramebuffer);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return Minecraft.getInstance().getMainRenderTarget().frameBufferId;
     }
 
     @Override

@@ -12,11 +12,6 @@ import java.nio.ByteBuffer;
 import static org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE;
 import static org.lwjgl.opengl.GL12.GL_BGRA;
 
-/**
- * Wraps a Pixel Buffer Object based async GPU-to-CPU readback: a {@code glReadPixels} into
- * the PBO is issued immediately, but the CPU-side copy ({@link #readData()}) happens a few
- * frames later to hide GPU pipeline latency instead of stalling on completion.
- */
 public abstract class CullingMap {
     protected final int pboId;
     protected final int width;
@@ -84,6 +79,13 @@ public abstract class CullingMap {
 
     public void setDone() {
         done = true;
+    }
+
+    public void copyDataFrom(CullingMap other) {
+        ByteBuffer src = other.cullingBuffer.duplicate();
+        ByteBuffer dst = this.cullingBuffer.duplicate();
+        src.limit(Math.min(src.capacity(), dst.capacity()));
+        dst.put(src);
     }
 
     public void cleanup() {

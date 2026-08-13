@@ -1,12 +1,19 @@
 package com.evandev.brute_force_culling.culling;
 
 import com.evandev.brute_force_culling.config.ModConfig;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class EffectiveConfig {
     private static final double MIN_SAMPLING = 0.05;
-
+    private static final Map<EntityType<?>, Boolean> ENTITY_SKIP_CACHE = new ConcurrentHashMap<>();
+    private static final Map<BlockEntityType<?>, Boolean> BLOCK_ENTITY_SKIP_CACHE = new ConcurrentHashMap<>();
     private static volatile boolean loaded = false;
 
     public static void setLoaded() {
@@ -57,6 +64,37 @@ public class EffectiveConfig {
         if (unload()) return 1;
         int delay = ModConfig.get().updateDelay;
         return delay <= 9 ? delay + getShaderDynamicDelay() : delay;
+    }
+
+    public static long getAsyncSignalIntervalNanos() {
+        if (unload()) return 0L;
+        int hz = ModConfig.get().asyncSignalHz;
+        return hz <= 0 ? 0L : (1_000_000_000L / hz);
+    }
+
+    public static boolean shouldSkipEntityType(EntityType<?> type) {
+        Boolean cached = ENTITY_SKIP_CACHE.get(type);
+        if (cached != null) return cached;
+        if (unload()) return false;
+        ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        boolean skip = getModsSkip().contains(key.getNamespace()) || getEntitiesSkip().contains(key.toString());
+        ENTITY_SKIP_CACHE.put(type, skip);
+        return skip;
+    }
+
+    public static boolean shouldSkipBlockEntityType(BlockEntityType<?> type) {
+        Boolean cached = BLOCK_ENTITY_SKIP_CACHE.get(type);
+        if (cached != null) return cached;
+        if (unload()) return false;
+        ResourceLocation key = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type);
+        boolean skip = key != null && (getModsSkip().contains(key.getNamespace()) || getBlockEntitiesSkip().contains(key.toString()));
+        BLOCK_ENTITY_SKIP_CACHE.put(type, skip);
+        return skip;
+    }
+
+    public static void clearTypeSkipCaches() {
+        ENTITY_SKIP_CACHE.clear();
+        BLOCK_ENTITY_SKIP_CACHE.clear();
     }
 
     public static List<String> getEntitiesSkip() {

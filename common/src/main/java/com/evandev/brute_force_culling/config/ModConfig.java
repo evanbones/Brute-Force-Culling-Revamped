@@ -48,6 +48,9 @@ public class ModConfig {
     @SerializedName("updateDelay")
     public int updateDelay = 1;
 
+    @SerializedName("asyncSignalHz")
+    public int asyncSignalHz = 120;
+
     @SerializedName("entitySkip")
     public List<String> entitySkip = new ArrayList<>(List.of("create:stationary_contraption"));
 

@@ -40,10 +40,6 @@ public class ModIntegrationUtil {
         return null;
     }
 
-    /**
-     * JOML doesn't expose {@link FrustumIntersection}'s 6 plane vectors publicly, so this
-     * reflects into the private {@code planes} field (cached after first lookup).
-     */
     public static Vector4f[] getFrustumPlanes(FrustumIntersection frustum) {
         try {
             if (frustumPlanesField == null) {

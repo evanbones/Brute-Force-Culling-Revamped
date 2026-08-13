@@ -1,11 +1,9 @@
 package com.evandev.brute_force_culling.mixin;
 
-import com.evandev.brute_force_culling.culling.CullingRenderEvent;
 import com.evandev.brute_force_culling.culling.CullingStateManager;
 import com.evandev.brute_force_culling.culling.impl.ICullingShader;
 import com.mojang.blaze3d.shaders.ProgramManager;
 import com.mojang.blaze3d.shaders.Uniform;
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.renderer.ShaderInstance;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;

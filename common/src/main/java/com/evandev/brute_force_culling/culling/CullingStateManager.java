@@ -20,13 +20,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
@@ -36,15 +33,12 @@ import org.lwjgl.system.Checks;
 import java.io.IOException;
 import java.util.function.Consumer;
 
-/**
- * Central orchestrator for the GPU depth-pyramid occlusion culling pipeline. Owns the culling
- * maps, the depth pyramid render targets/shaders, the offset frustum, and per-frame state.
- */
 @SuppressWarnings("unused")
 public class CullingStateManager {
     public static final int DEPTH_SIZE = 5;
     public static final LifeTimer<Entity> visibleEntity = new LifeTimer<>();
     public static final LifeTimer<BlockPos> visibleBlock = new LifeTimer<>();
+    private static final it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap SHADER_DEPTH_BUFFER_ID = new it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap();
     public static volatile EntityCullingMap ENTITY_CULLING_MAP = null;
     public static volatile ChunkCullingMap CHUNK_CULLING_MAP = null;
     public static Matrix4f VIEW_MATRIX = new Matrix4f();
@@ -60,10 +54,8 @@ public class CullingStateManager {
     public static Frustum FRUSTUM;
     public static boolean updatingDepth;
     public static boolean applyFrustum;
-
     public static int DEBUG = 0;
     public static int[] DEPTH_TEXTURE = new int[DEPTH_SIZE];
-
     public static ShaderLoader SHADER_LOADER = null;
     public static int fps = 0;
     public static int clientTickCount = 0;
@@ -172,6 +164,14 @@ public class CullingStateManager {
             entityMap.cleanup();
             ENTITY_CULLING_MAP = null;
         }
+
+        SHADER_DEPTH_BUFFER_ID.clear();
+    }
+
+    public static int getKeepAliveTicks() {
+        int f = Math.max(fps, 1);
+        int ticks = (80 + f - 1) / f;
+        return Math.max(3, Math.min(ticks, 20));
     }
 
     public static int mapChunkY(double posY) {
@@ -238,12 +238,7 @@ public class CullingStateManager {
         final EntityCullingMap entityMap = ENTITY_CULLING_MAP;
         if (entityMap == null || !EffectiveConfig.getCullBlockEntity()) return false;
 
-        ResourceLocation key = BlockEntityType.getKey(blockEntity.getType());
-        if (key == null) return false;
-
-        if (EffectiveConfig.getModsSkip().contains(key.getNamespace())) return false;
-
-        if (EffectiveConfig.getBlockEntitiesSkip().contains(key.toString())) return false;
+        if (EffectiveConfig.shouldSkipBlockEntityType(blockEntity.getType())) return false;
 
         final boolean timing = DEBUG > 0;
         long time = timing ? System.nanoTime() : 0;
@@ -270,11 +265,7 @@ public class CullingStateManager {
         if (entity instanceof Player || entity.isCurrentlyGlowing()) return false;
         if (entity.distanceToSqr(CAMERA.getPosition()) < 4.0) return false;
 
-        ResourceLocation entityKey = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
-
-        if (EffectiveConfig.getModsSkip().contains(entityKey.getNamespace())) return false;
-
-        if (EffectiveConfig.getEntitiesSkip().contains(entityKey.toString())) return false;
+        if (EffectiveConfig.shouldSkipEntityType(entity.getType())) return false;
 
         final EntityCullingMap entityMap = ENTITY_CULLING_MAP;
         if (entityMap == null || !EffectiveConfig.getCullEntity()) return false;
@@ -314,10 +305,11 @@ public class CullingStateManager {
         if (mc.player != null && mc.level != null) {
             clientTickCount++;
             ChunkCullingMap chunkCullingMap = CHUNK_CULLING_MAP;
-            if (mc.player.tickCount > 60 && clientTickCount > 60
-                    && chunkCullingMap != null && !chunkCullingMap.isDone()) {
-                chunkCullingMap.setDone();
-                onLevelRendererAllChanged();
+            if (chunkCullingMap != null && !chunkCullingMap.isDone()) {
+                if (mc.player.tickCount > 60 || clientTickCount > 60) {
+                    chunkCullingMap.setDone();
+                    onLevelRendererAllChanged();
+                }
             }
         } else {
             cleanup();
@@ -381,11 +373,12 @@ public class CullingStateManager {
             }
 
             if (isNextLoopFrame) {
-                visibleBlock.tick(clientTickCount, 3);
-                visibleEntity.tick(clientTickCount, 3);
+                int keepAlive = getKeepAliveTicks();
+                visibleBlock.tick(clientTickCount, keepAlive);
+                visibleEntity.tick(clientTickCount, keepAlive);
 
                 final EntityCullingMap entityMap = ENTITY_CULLING_MAP;
-                if (entityMap != null) entityMap.getEntityTable().tickTemp(clientTickCount);
+                if (entityMap != null) entityMap.getEntityTable().tickTemp(clientTickCount, keepAlive);
 
                 entityCullingTime = preEntityCullingTime;
                 preEntityCullingTime = 0;
@@ -462,8 +455,27 @@ public class CullingStateManager {
             int depthTexture = mc.getMainRenderTarget().getDepthTextureId();
             ShaderLoader loader = SHADER_LOADER;
             if (loader != null && loader.enabledShader()) {
-                int shaderDepthTexture = loader.getDepthTextureID();
-                if (shaderDepthTexture != -1) depthTexture = shaderDepthTexture;
+                int fboId = loader.getFrameBufferID();
+                if (!SHADER_DEPTH_BUFFER_ID.containsKey(fboId)) {
+                    RenderSystem.assertOnRenderThreadOrInit();
+                    com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(36160, fboId);
+                    int[] attachmentObjectType = new int[1];
+                    org.lwjgl.opengl.GL30.glGetFramebufferAttachmentParameteriv(36160, 36096, 36048, attachmentObjectType);
+                    if (attachmentObjectType[0] == 5890) {
+                        int[] depthTextureID = new int[1];
+                        org.lwjgl.opengl.GL30.glGetFramebufferAttachmentParameteriv(36160, 36096, 36049, depthTextureID);
+                        depthTexture = depthTextureID[0];
+                        SHADER_DEPTH_BUFFER_ID.put(fboId, depthTexture);
+                    } else {
+                        int fallback = loader.getDepthTextureID();
+                        if (fallback != -1) {
+                            depthTexture = fallback;
+                            SHADER_DEPTH_BUFFER_ID.put(fboId, depthTexture);
+                        }
+                    }
+                } else {
+                    depthTexture = SHADER_DEPTH_BUFFER_ID.get(fboId);
+                }
             }
 
             MAIN_DEPTH_TEXTURE = depthTexture;
@@ -500,6 +512,9 @@ public class CullingStateManager {
     }
 
     private static void updateChunkCullingMap(Minecraft mc) {
+        if (LEVEL_SECTION_RANGE == 0 && mc.level != null) {
+            onLevelRendererAllChanged();
+        }
         int dist = mc.options.getEffectiveRenderDistance();
         int renderingDiameter = dist * 2 + 1;
         int maxSize = renderingDiameter * LEVEL_SECTION_RANGE * renderingDiameter;
@@ -530,10 +545,12 @@ public class CullingStateManager {
         }
 
         int neededH = (entityMap.getEntityTable().size() / 64 * 64 + 64) / 8 + 1;
-        if (ENTITY_CULLING_MAP_TARGET.height != neededH) {
+        int currentH = ENTITY_CULLING_MAP_TARGET.height;
+        if (neededH > currentH || currentH > neededH * 4) {
             ENTITY_CULLING_MAP_TARGET.resize(8, neededH, Minecraft.ON_OSX);
             EntityCullingMap newMap = new EntityCullingMap(8, neededH);
             newMap.getEntityTable().copyTemp(entityMap.getEntityTable(), clientTickCount);
+            newMap.copyDataFrom(entityMap);
             entityMap.cleanup();
             entityMap = newMap;
             ENTITY_CULLING_MAP = entityMap;
@@ -547,16 +564,14 @@ public class CullingStateManager {
             entityMap.getEntityTable().clearIndexMap();
 
             for (Entity e : mc.level.entitiesForRendering()) {
-                ResourceLocation entityKey = BuiltInRegistries.ENTITY_TYPE.getKey(e.getType());
-                if (EffectiveConfig.getModsSkip().contains(entityKey.getNamespace())) continue;
+                if (EffectiveConfig.shouldSkipEntityType(e.getType())) continue;
                 entityMap.getEntityTable().addObject(e);
             }
 
             IEntitiesForRender levelRenderer = (IEntitiesForRender) mc.levelRenderer;
             for (var section : levelRenderer.bruteForceCulling$visibleSections()) {
                 for (BlockEntity be : section.getCompiled().getRenderableBlockEntities()) {
-                    ResourceLocation beKey = BlockEntityType.getKey(be.getType());
-                    if (beKey != null && EffectiveConfig.getModsSkip().contains(beKey.getNamespace())) continue;
+                    if (EffectiveConfig.shouldSkipBlockEntityType(be.getType())) continue;
                     entityMap.getEntityTable().addObject(be);
                 }
             }

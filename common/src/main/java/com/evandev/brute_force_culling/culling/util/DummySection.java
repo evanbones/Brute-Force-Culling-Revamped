@@ -2,10 +2,6 @@ package com.evandev.brute_force_culling.culling.util;
 
 import com.evandev.brute_force_culling.culling.impl.IRenderSectionVisibility;
 
-/**
- * Stand-in {@link IRenderSectionVisibility} used on the vanilla (non-Sodium) rendering path,
- * where there is no real Sodium {@code RenderSection} to attach visibility bookkeeping to.
- */
 public class DummySection implements IRenderSectionVisibility {
     private int x;
     private int y;

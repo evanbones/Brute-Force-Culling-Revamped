@@ -135,8 +135,8 @@ public class EntityCullingMap extends CullingMap {
             indexMap.clear();
         }
 
-        public void tickTemp(int tickCount) {
-            tempObjectTimer.tick(tickCount, 3);
+        public void tickTemp(int tickCount, int keepAliveTicks) {
+            tempObjectTimer.tick(tickCount, keepAliveTicks);
         }
 
         public void addAllTemp() {
@@ -152,12 +152,12 @@ public class EntityCullingMap extends CullingMap {
             readEntity.clear();
         }
 
-        private void addAttribute(Consumer<Consumer<FloatBuffer>> consumer, AABB aabb, int index) {
+        private void addAttribute(Consumer<Consumer<FloatBuffer>> consumer, AABB aabb, float inflate, int index) {
             consumer.accept(buffer -> {
                 buffer.put((float) index);
                 float size = (float) Math.max(aabb.getXsize(), aabb.getZsize());
-                buffer.put(size + 0.5F);
-                buffer.put((float) aabb.getYsize() + 0.5F);
+                buffer.put(size + 0.5F + inflate);
+                buffer.put((float) aabb.getYsize() + 0.5F + inflate);
                 Vec3 pos = aabb.getCenter();
                 buffer.put((float) pos.x);
                 buffer.put((float) pos.y);
@@ -167,10 +167,16 @@ public class EntityCullingMap extends CullingMap {
 
         public void addEntityAttribute(Consumer<Consumer<FloatBuffer>> consumer) {
             clearUpload();
+            int stalenessTicks = CullingStateManager.getKeepAliveTicks();
             indexMap.forEach((o, index) -> {
                 AABB aabb = ModIntegrationUtil.getObjectAABB(o);
                 if (aabb != null) {
-                    addAttribute(consumer, aabb, index);
+                    float inflate = 0.0F;
+                    if (o instanceof Entity e) {
+                        double step = Math.max(Math.abs(e.getX() - e.xOld), Math.max(Math.abs(e.getY() - e.yOld), Math.abs(e.getZ() - e.zOld)));
+                        inflate = (float) Math.min(step * stalenessTicks, 3.0D);
+                    }
+                    addAttribute(consumer, aabb, inflate, index);
                     uploadTemp.add(o);
                     uploadEntity.put(o, index);
                 }
