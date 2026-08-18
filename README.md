@@ -36,6 +36,8 @@ Original mod created by Misanthropy (Brute Force Rendering Culling Revived).
 
 _Original_ original mod created by Rogo (Brute Force Rendering Culling).
 
+Logo by Nekomaster!
+
 ## License
 
 [![Code license (LGPL-3.0)](https://img.shields.io/badge/code%20license-LGPL3.0-green.svg?style=flat-square)](https://github.com/evanbones/Brute-Force-Culling/blob/1.21.1/LICENSE)
