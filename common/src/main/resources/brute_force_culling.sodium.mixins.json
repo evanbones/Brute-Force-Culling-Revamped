@@ -7,7 +7,7 @@
   "mixins": [
   ],
   "client": [
-    "OcclusionCullerMixin",
+    "SectionCollectorMixin",
     "RenderSectionMixin",
     "RenderSectionManagerMixin"
   ],

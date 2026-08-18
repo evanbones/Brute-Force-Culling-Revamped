@@ -16,10 +16,6 @@ import java.util.HashSet;
 import java.util.function.Consumer;
 
 public class EntityCullingMap extends CullingMap {
-    public static final AABB INFINITE_EXTENT_AABB = new AABB(
-            Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY,
-            Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
-
     private final EntityMap entityMap = new EntityMap();
 
     public EntityCullingMap(int width, int height) {
@@ -44,7 +40,7 @@ public class EntityCullingMap extends CullingMap {
     public boolean isObjectVisible(Object o) {
         AABB aabb = ModIntegrationUtil.getObjectAABB(o);
 
-        if (aabb == INFINITE_EXTENT_AABB) {
+        if (!ModIntegrationUtil.isFiniteAABB(aabb)) {
             return true;
         }
 
@@ -170,7 +166,7 @@ public class EntityCullingMap extends CullingMap {
             int stalenessTicks = CullingStateManager.getKeepAliveTicks();
             indexMap.forEach((o, index) -> {
                 AABB aabb = ModIntegrationUtil.getObjectAABB(o);
-                if (aabb != null) {
+                if (ModIntegrationUtil.isFiniteAABB(aabb)) {
                     float inflate = 0.0F;
                     if (o instanceof Entity e) {
                         double step = Math.max(Math.abs(e.getX() - e.xOld), Math.max(Math.abs(e.getY() - e.yOld), Math.abs(e.getZ() - e.zOld)));

@@ -52,7 +52,7 @@ public class EffectiveConfig {
     public static boolean shouldCullChunk() {
         if (unload()) return false;
         var chunkCullingMap = CullingStateManager.CHUNK_CULLING_MAP;
-        if (chunkCullingMap == null || !chunkCullingMap.isDone()) return false;
+        if (chunkCullingMap == null || !chunkCullingMap.isDone() || !chunkCullingMap.hasData()) return false;
         return ModConfig.get().cullChunk;
     }
 

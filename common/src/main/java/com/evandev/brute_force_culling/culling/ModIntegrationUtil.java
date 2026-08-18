@@ -29,15 +29,17 @@ public class ModIntegrationUtil {
         return hasMod("iris");
     }
 
-    public static boolean hasNvidium() {
-        return false;
-    }
-
     public static AABB getObjectAABB(Object o) {
         if (o instanceof BlockEntity be) return new AABB(be.getBlockPos());
-        if (o instanceof Entity e) return e.getBoundingBox();
+        if (o instanceof Entity e) return e.getBoundingBoxForCulling();
         if (o instanceof IAABBObject aabb) return aabb.getAABB();
         return null;
+    }
+
+    public static boolean isFiniteAABB(AABB aabb) {
+        return aabb != null
+                && Double.isFinite(aabb.minX) && Double.isFinite(aabb.minY) && Double.isFinite(aabb.minZ)
+                && Double.isFinite(aabb.maxX) && Double.isFinite(aabb.maxY) && Double.isFinite(aabb.maxZ);
     }
 
     public static Vector4f[] getFrustumPlanes(FrustumIntersection frustum) {

@@ -71,6 +71,10 @@ public class ModConfig {
         if (CONFIG_FILE.exists()) {
             try (FileReader reader = new FileReader(CONFIG_FILE)) {
                 INSTANCE = GSON.fromJson(reader, ModConfig.class);
+                if (INSTANCE == null) {
+                    INSTANCE = new ModConfig();
+                    save();
+                }
             } catch (Exception e) {
                 Constants.LOG.error("Failed to load " + Constants.MOD_ID + ".json", e);
                 INSTANCE = new ModConfig();

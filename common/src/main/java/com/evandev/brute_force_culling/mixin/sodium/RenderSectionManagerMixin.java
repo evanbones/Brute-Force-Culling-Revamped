@@ -9,7 +9,6 @@ import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import net.minecraft.client.Camera;
 import net.minecraft.core.SectionPos;
-import net.minecraft.world.phys.AABB;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,8 +25,21 @@ public abstract class RenderSectionManagerMixin {
 
     @Inject(method = "update", at = @At(value = "HEAD"), remap = false)
     private void onUpdate(Camera camera, Viewport viewport, boolean spectator, CallbackInfo ci) {
-        CullingStateManager.updating();
+        if (!CullingStateManager.consumeForcedGraphUpdate()) {
+            CullingStateManager.updating();
+        }
         CullingStateManager.beginChunkCullingCount();
+    }
+
+    @Inject(method = "needsUpdate", at = @At(value = "RETURN"), remap = false, cancellable = true)
+    private void onNeedsUpdate(CallbackInfoReturnable<Boolean> cir) {
+        if (cir.getReturnValueZ()) return;
+        if (CullingStateManager.checkCulling || CullingStateManager.renderingShader()) return;
+        if (!EffectiveConfig.shouldCullChunk()) return;
+
+        if (CullingStateManager.consumeCullingDataRefresh()) {
+            cir.setReturnValue(true);
+        }
     }
 
     @Inject(method = "update", at = @At(value = "TAIL"), remap = false)
@@ -37,17 +49,13 @@ public abstract class RenderSectionManagerMixin {
 
     @Inject(method = "isSectionVisible", at = @At(value = "RETURN"), remap = false, cancellable = true)
     private void onIsSectionVisible(int x, int y, int z, CallbackInfoReturnable<Boolean> cir) {
-        if (CullingStateManager.renderingShader()) return;
+        if (!cir.getReturnValueZ()) return;
+        if (CullingStateManager.checkCulling || CullingStateManager.renderingShader()) return;
         if (!EffectiveConfig.shouldCullChunk()) return;
 
         RenderSection section = this.sectionByPosition.get(SectionPos.asLong(x, y, z));
         if (section == null) return;
 
-        cir.setReturnValue(
-                CullingStateManager.shouldRenderChunk((IRenderSectionVisibility) section, false)
-                        && CullingStateManager.FRUSTUM.isVisible(new AABB(
-                        section.getOriginX(), section.getOriginY(), section.getOriginZ(),
-                        section.getOriginX() + 16, section.getOriginY() + 16, section.getOriginZ() + 16))
-        );
+        cir.setReturnValue(CullingStateManager.shouldRenderChunk((IRenderSectionVisibility) section, false));
     }
 }

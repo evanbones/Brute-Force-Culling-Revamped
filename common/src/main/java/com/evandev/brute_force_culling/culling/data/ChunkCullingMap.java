@@ -2,6 +2,7 @@ package com.evandev.brute_force_culling.culling.data;
 
 import com.evandev.brute_force_culling.culling.CullingStateManager;
 import com.evandev.brute_force_culling.culling.EffectiveConfig;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 public class ChunkCullingMap extends CullingMap {
@@ -9,8 +10,15 @@ public class ChunkCullingMap extends CullingMap {
     public int lastQueueUpdateCount = 0;
     private int renderDistance = 0;
     private int spacePartitionSize = 0;
+    private int pendingCameraX;
+    private int pendingCameraZ;
+    private int transferCameraX;
+    private int transferCameraZ;
     private int cameraX;
     private int cameraZ;
+    private int sectionRange;
+    private int pendingSectionRange;
+    private int transferSectionRange;
 
     public ChunkCullingMap(int width, int height) {
         super(width, height);
@@ -37,9 +45,29 @@ public class ChunkCullingMap extends CullingMap {
     }
 
     public void updateCamera() {
+        if (CullingStateManager.CAMERA == null) return;
         Vec3 camera = CullingStateManager.CAMERA.getPosition();
-        this.cameraX = (int) camera.x >> 4;
-        this.cameraZ = (int) camera.z >> 4;
+        this.pendingCameraX = Mth.floor(camera.x) >> 4;
+        this.pendingCameraZ = Mth.floor(camera.z) >> 4;
+        this.pendingSectionRange = CullingStateManager.LEVEL_SECTION_RANGE;
+    }
+
+    @Override
+    protected void onTransferData() {
+        this.transferCameraX = this.pendingCameraX;
+        this.transferCameraZ = this.pendingCameraZ;
+        this.transferSectionRange = this.pendingSectionRange;
+    }
+
+    @Override
+    protected void onReadData() {
+        this.cameraX = this.transferCameraX;
+        this.cameraZ = this.transferCameraZ;
+        this.sectionRange = this.transferSectionRange;
+    }
+
+    public boolean hasData() {
+        return sectionRange > 0;
     }
 
     public boolean isChunkOffsetCameraVisible(int x, int y, int z, boolean checkForChunk) {
@@ -47,11 +75,16 @@ public class ChunkCullingMap extends CullingMap {
     }
 
     public boolean isChunkVisible(int posX, int posY, int posZ, boolean checkForChunk) {
-        int index = 1 + (((posX + renderDistance) * spacePartitionSize * CullingStateManager.LEVEL_SECTION_RANGE + (posZ + renderDistance) * CullingStateManager.LEVEL_SECTION_RANGE + posY) << 2);
+        if (sectionRange <= 0 || spacePartitionSize <= 0) return true;
+        if (posX < -renderDistance || posX > renderDistance) return true;
+        if (posZ < -renderDistance || posZ > renderDistance) return true;
+        if (posY < 0 || posY >= sectionRange) return true;
+
+        int index = 1 + (((posX + renderDistance) * spacePartitionSize * sectionRange + (posZ + renderDistance) * sectionRange + posY) << 2);
 
         if (index >= 0 && index < cullingBuffer.limit()) {
             return (cullingBuffer.get(index) & 0xFF) > (checkForChunk ? 0 : 127);
         }
-        return false;
+        return true;
     }
 }

@@ -43,6 +43,7 @@ public abstract class CullingMap {
             GL11.glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, 0);
             GL15.glBindBuffer(GL31.GL_PIXEL_PACK_BUFFER, 0);
             CullingStateManager.bindMainFrameTarget();
+            onTransferData();
             delayCount = configDelayCount() + dynamicDelayCount();
         } else if (shouldUpdate()) {
             delayCount--;
@@ -55,10 +56,17 @@ public abstract class CullingMap {
 
     protected abstract boolean shouldUpdate();
 
+    protected void onTransferData() {
+    }
+
+    protected void onReadData() {
+    }
+
     public void readData() {
         GL15.glBindBuffer(GL31.GL_PIXEL_PACK_BUFFER, pboId);
         GL15.glGetBufferSubData(GL31.GL_PIXEL_PACK_BUFFER, 0, cullingBuffer);
         GL15.glBindBuffer(GL31.GL_PIXEL_PACK_BUFFER, 0);
+        onReadData();
         setTransferred(false);
     }
 

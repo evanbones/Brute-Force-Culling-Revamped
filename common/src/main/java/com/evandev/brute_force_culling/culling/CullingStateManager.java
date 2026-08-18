@@ -95,6 +95,8 @@ public class CullingStateManager {
     private static int lastVisibleUpdatedFrame;
     private static int continueUpdateCount;
     private static boolean lastUpdate;
+    private static boolean cullingDataRefreshed;
+    private static boolean graphUpdateForced;
     private static double cachedRenderDistanceSq = 0;
     private static int gl33 = -1;
 
@@ -150,6 +152,8 @@ public class CullingStateManager {
     public static void cleanup() {
         tick = 0;
         clientTickCount = 0;
+        cullingDataRefreshed = false;
+        graphUpdateForced = false;
         visibleEntity.clear();
         visibleBlock.clear();
 
@@ -223,7 +227,7 @@ public class CullingStateManager {
     }
 
     public static boolean shouldSkipBlockEntity(BlockEntity blockEntity, AABB aabb, BlockPos pos) {
-        if (renderingShader()) return false;
+        if (renderingShader() || CAMERA == null) return false;
 
         blockCount++;
 
@@ -259,7 +263,7 @@ public class CullingStateManager {
     }
 
     public static boolean shouldSkipEntity(Entity entity) {
-        if (renderingShader()) return false;
+        if (renderingShader() || CAMERA == null) return false;
 
         entityCount++;
         if (entity instanceof Player || entity.isCurrentlyGlowing()) return false;
@@ -408,6 +412,7 @@ public class CullingStateManager {
             long time = System.nanoTime();
             chunkMap.readData();
             lastVisibleUpdatedFrame = frame;
+            cullingDataRefreshed = true;
             preChunkCullingInitTime += System.nanoTime() - time;
         }
 
@@ -512,23 +517,28 @@ public class CullingStateManager {
     }
 
     private static void updateChunkCullingMap(Minecraft mc) {
-        if (LEVEL_SECTION_RANGE == 0 && mc.level != null) {
+        if (mc.level == null) return;
+
+        if (LEVEL_SECTION_RANGE == 0) {
             onLevelRendererAllChanged();
+            if (LEVEL_SECTION_RANGE == 0) return;
         }
         int dist = mc.options.getEffectiveRenderDistance();
         int renderingDiameter = dist * 2 + 1;
         int maxSize = renderingDiameter * LEVEL_SECTION_RANGE * renderingDiameter;
         int cSize = (int) Math.sqrt(maxSize) + 1;
 
-        if (CHUNK_CULLING_MAP_TARGET.width != cSize) {
-            CHUNK_CULLING_MAP_TARGET.resize(cSize, cSize, Minecraft.ON_OSX);
+        if (CHUNK_CULLING_MAP == null || CHUNK_CULLING_MAP_TARGET.width != cSize) {
+            if (CHUNK_CULLING_MAP_TARGET.width != cSize) {
+                CHUNK_CULLING_MAP_TARGET.resize(cSize, cSize, Minecraft.ON_OSX);
+            }
 
             ChunkCullingMap oldMap = CHUNK_CULLING_MAP;
             if (oldMap != null) oldMap.cleanup();
 
             ChunkCullingMap newMap = new ChunkCullingMap(cSize, cSize);
-            CHUNK_CULLING_MAP = newMap;
             newMap.generateIndex(dist);
+            CHUNK_CULLING_MAP = newMap;
         }
 
         long time = System.nanoTime();
@@ -635,6 +645,19 @@ public class CullingStateManager {
         if (RenderSystem.isOnRenderThread() && gl33 < 0)
             gl33 = (GL.getCapabilities().OpenGL33 || Checks.checkFunctions(GL.getCapabilities().glVertexAttribDivisor)) ? 1 : 0;
         return gl33 == 1;
+    }
+
+    public static boolean consumeCullingDataRefresh() {
+        if (!cullingDataRefreshed) return false;
+        cullingDataRefreshed = false;
+        graphUpdateForced = true;
+        return true;
+    }
+
+    public static boolean consumeForcedGraphUpdate() {
+        if (!graphUpdateForced) return false;
+        graphUpdateForced = false;
+        return true;
     }
 
     public static void updating() {
