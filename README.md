@@ -3,7 +3,7 @@
 <a href='https://fabricmc.net'><img alt="fabric" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/supported/fabric_vector.svg"></a>
 <a href='https://neoforged.net/'><img alt="neoforge" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/supported/neoforge_vector.svg"></a>
 
-Brute Force Culling Revamped is a modern multiloader port of Brute Force Rendering Culling Revived.
+Brute Force Culling Revamped is a modern multiloader port of [Brute Force Rendering Culling Revived](https://www.curseforge.com/minecraft/mc-mods/brute-force-rendering-culling-revived).
 
 ### What does the original mod do?
 
@@ -13,8 +13,8 @@ It uses advanced occlusion culling techniques to skip drawing chunks, entities, 
 cannot see. By cutting out this hidden work, the mod reduces the strain on chunk compilation and rendering, which helps
 keep frame rates steadier in heavy modpacks or areas crowded with blocks and mobs.
 
-**The biggest gains show up in enclosed spaces or builds with lots of occlusions**, while open landscapes see less impact.
-Rendering tasks are canceled early at the CPU stage, saving resources before they ever reach the GPU.
+**The biggest gains show up in enclosed spaces or builds with lots of occlusions**, while open landscapes see less
+impact. Rendering tasks are canceled early at the CPU stage, saving resources before they ever reach the GPU.
 
 ### Be Aware!
 
@@ -44,4 +44,4 @@ Logo by Nekomaster!
 
 ---
 
-[![discord-plural](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/compact/social/discord-plural_vector.svg)](https://discord.com/invite/JcGRdT6Pbx) [![github-plural](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/compact/social/github-plural_vector.svg)](https://github.com/evanbones/Brute-Force-Culling)
+[![github-plural](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/compact/social/github-plural_vector.svg)](https://github.com/evanbones/Brute-Force-Culling)
