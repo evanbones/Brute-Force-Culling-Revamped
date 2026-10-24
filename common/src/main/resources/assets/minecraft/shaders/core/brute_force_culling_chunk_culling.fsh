@@ -106,6 +106,81 @@ float getUVDepth(int idx, vec2 uv) {
     return unpackDepth(texture(Sampler4, uv).rg) * 500.0;
 }
 
+const float MAX_SAFE_MOVEMENT = 32.0;
+const int GAP_SEARCH_RINGS = 4;
+
+float unpackMinDepth(vec4 texel) {
+    return unpackDepth(texel.ba) * 500.0;
+}
+
+float getUVMinDepth(int idx, vec2 uv) {
+    if(idx == 0) return unpackMinDepth(texture(Sampler0, uv));
+    else if(idx == 1) return unpackMinDepth(texture(Sampler1, uv));
+    else if(idx == 2) return unpackMinDepth(texture(Sampler2, uv));
+    else if(idx == 3) return unpackMinDepth(texture(Sampler3, uv));
+    return unpackMinDepth(texture(Sampler4, uv));
+}
+
+// True when the depth texel at uv could reveal the chunk: something in it is further away than the chunk, or it is off
+// screen, where nothing is known. Otherwise the texel is solid occluder and its nearest depth lowers nearestOccluder.
+bool isGap(int idx, vec2 uv, float chunkDepth, inout float nearestOccluder) {
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return true;
+    if (chunkDepth < getUVDepth(idx, uv)) return true;
+    nearestOccluder = min(nearestOccluder, getUVMinDepth(idx, uv));
+    return false;
+}
+
+// Camera movement, in blocks, that a culled chunk is guaranteed to stay hidden for. Moving the camera by D shifts an
+// occluder at depth z across the screen by at most D / z (in tangent space), so when the r texel rings around the
+// chunk's footprint are all solid, the camera has to move at least r * texel * z before a gap can reach the chunk.
+// Fine levels resolve gaps close to the footprint, coarse levels prove large solid areas cheaply, so several levels are
+// tried and the best bound kept. Halved to cover forward motion and depth linearisation error.
+float safeMovement(int idx, float minX, float maxX, float minY, float maxY, float chunkDepth, float nearestOccluder) {
+    float best = 0.0;
+    for (int level = max(idx - 2, 0); level < 5; ++level) {
+        float sx = 1.0 / DepthScreenSize[level].x;
+        float sy = 1.0 / DepthScreenSize[level].y;
+        // Texel centres covering the footprint on this level.
+        float x0 = (floor(minX / sx) + 0.5) * sx;
+        float x1 = (floor(min(maxX, 0.9999) / sx) + 0.5) * sx;
+        float y0 = (floor(minY / sy) + 0.5) * sy;
+        float y1 = (floor(min(maxY, 0.9999) / sy) + 0.5) * sy;
+
+        // Finer levels than the one that culled the chunk are solid over the footprint by construction; coarser ones
+        // mix in surroundings and have to be checked. Once a level isn't solid, no coarser one is either.
+        if (level > idx) {
+            bool solid = true;
+            for (float x = x0; x <= x1 + sx * 0.5 && solid; x += sx) {
+                for (float y = y0; y <= y1 + sy * 0.5 && solid; y += sy) {
+                    solid = !isGap(level, vec2(x, y), chunkDepth, nearestOccluder);
+                }
+            }
+            if (!solid) break;
+        }
+
+        int rings = 0;
+        for (int k = 1; k <= GAP_SEARCH_RINGS; ++k) {
+            float rx0 = x0 - float(k) * sx;
+            float rx1 = x1 + float(k) * sx;
+            float ry0 = y0 - float(k) * sy;
+            float ry1 = y1 + float(k) * sy;
+            bool gap = false;
+            for (float x = rx0; x <= rx1 + sx * 0.5 && !gap; x += sx) {
+                gap = isGap(level, vec2(x, ry0), chunkDepth, nearestOccluder) || isGap(level, vec2(x, ry1), chunkDepth, nearestOccluder);
+            }
+            for (float y = ry0 + sy; y < ry1 - sy * 0.5 && !gap; y += sy) {
+                gap = isGap(level, vec2(rx0, y), chunkDepth, nearestOccluder) || isGap(level, vec2(rx1, y), chunkDepth, nearestOccluder);
+            }
+            if (gap) break;
+            rings = k;
+        }
+
+        float texelTan = min(2.0 * sx / CullingProjMat[0][0], 2.0 * sy / CullingProjMat[1][1]);
+        best = max(best, float(rings) * texelTan * nearestOccluder);
+    }
+    return clamp(0.5 * best, 0.0, MAX_SAFE_MOVEMENT);
+}
+
 void main() {
     int screenIndex = int(gl_FragCoord.x) + int(gl_FragCoord.y) * int(CullingSize.x);
     int rDist = int(RenderDistance);
@@ -192,6 +267,7 @@ void main() {
     minY = max(minY - yStep, 0.0);
     maxY = min(maxY + yStep, 1.0);
 
+    float nearestOccluder = chunkDepth;
     for(float x = minX; x <= maxX; x += xStep) {
         for(float y = minY; y <= maxY; y += yStep) {
             float pixelDepth = getUVDepth(idx, vec2(x, y));
@@ -199,8 +275,13 @@ void main() {
                 fragColor = vec4(0.0, 1.0, 0.0, 1.0);
                 return;
             }
+            nearestOccluder = min(nearestOccluder, getUVMinDepth(idx, vec2(x, y)));
         }
     }
 
-    fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    // Culled. The verdict only holds for the camera position this map was drawn from, and it is read back a few
+    // frames later. Find the nearest gap around the chunk's footprint and store how far the camera can move before
+    // parallax could slide that gap over the chunk.
+    // Stored as a square root so short distances, the common case near walls, keep their precision in 8 bits.
+    fragColor = vec4(sqrt(safeMovement(idx, minX, maxX, minY, maxY, chunkDepth, nearestOccluder) / MAX_SAFE_MOVEMENT), 0.0, 0.0, 1.0);
 }

@@ -11,12 +11,12 @@ public abstract class RenderChunkMixin implements IRenderSectionVisibility {
     private int bruteForceCulling$cullingLastVisibleFrame = -1;
 
     @Override
-    public boolean bruteForceCulling$shouldCheckVisibility(int frame) {
-        return frame != bruteForceCulling$cullingLastVisibleFrame;
+    public boolean bruteForceCulling$isVisibleAtFrame(int frame) {
+        return frame == bruteForceCulling$cullingLastVisibleFrame;
     }
 
     @Override
-    public void bruteForceCulling$updateVisibleTick(int frame) {
+    public void bruteForceCulling$markVisibleAtFrame(int frame) {
         bruteForceCulling$cullingLastVisibleFrame = frame;
     }
 

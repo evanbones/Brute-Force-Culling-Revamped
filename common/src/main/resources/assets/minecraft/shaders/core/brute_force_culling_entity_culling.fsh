@@ -22,6 +22,7 @@ out vec4 fragColor;
 
 float near = 0.1;
 float far  = 1000.0;
+float depthBias = 0.25;
 
 int getSampler(float xLength, float yLength) {
     for (int i = 0; i < 5; ++i) {
@@ -145,7 +146,9 @@ void main() {
     float xStep = 1.0 / DepthScreenSize[idx].x;
     float yStep = 1.0 / DepthScreenSize[idx].y;
 
-    float entityDepth = LinearizeDepth(worldToScreenSpace(moveTowardsCamera(Pos, halfWidth)).z) - 1.0;
+    vec3 towardsEntity = normalize(Pos - CullingCameraPos);
+    float nearSurfaceOffset = dot(abs(towardsEntity), vec3(halfWidth, halfHeight, halfWidth));
+    float entityDepth = LinearizeDepth(worldToScreenSpace(moveTowardsCamera(Pos, nearSurfaceOffset)).z) - depthBias;
 
     for (float x = minX; x <= maxX + 0.001; x += max((maxX - minX) / 3.0, 0.001)) {
         for (float y = minY; y <= maxY + 0.001; y += max((maxY - minY) / 3.0, 0.001)) {

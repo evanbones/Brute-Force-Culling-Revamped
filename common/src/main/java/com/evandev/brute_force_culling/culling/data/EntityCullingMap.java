@@ -3,16 +3,14 @@ package com.evandev.brute_force_culling.culling.data;
 import com.evandev.brute_force_culling.culling.CullingStateManager;
 import com.evandev.brute_force_culling.culling.EffectiveConfig;
 import com.evandev.brute_force_culling.culling.ModIntegrationUtil;
-import com.evandev.brute_force_culling.culling.util.IndexedSet;
 import com.evandev.brute_force_culling.culling.util.LifeTimer;
+import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 
 import java.nio.FloatBuffer;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.function.Consumer;
 
 public class EntityCullingMap extends CullingMap {
@@ -38,35 +36,30 @@ public class EntityCullingMap extends CullingMap {
     }
 
     public boolean isObjectVisible(Object o) {
-        AABB aabb = ModIntegrationUtil.getObjectAABB(o);
-
-        if (!ModIntegrationUtil.isFiniteAABB(aabb)) {
-            return true;
-        }
-
-        int idx = getEntityTable().getIndex(o);
+        int idx = entityMap.getIndex(o);
         if (idx == -1) {
-            getEntityTable().addTemp(o, CullingStateManager.clientTickCount);
+            entityMap.addTemp(o, CullingStateManager.clientTickCount);
             return true;
         }
 
+        entityMap.tempObjectTimer.refreshIfPresent(o, CullingStateManager.clientTickCount);
+        return isSlotVisible(idx);
+    }
+
+    public boolean isObjectVisibleForTick(Object o) {
+        int idx = entityMap.getIndex(o);
+        return idx == -1 || isSlotVisible(idx);
+    }
+
+    private boolean isSlotVisible(int idx) {
         int bufferIdx = 1 + idx * 4;
-
-        if (getEntityTable().tempObjectTimer.contains(o)) {
-            getEntityTable().addTemp(o, CullingStateManager.clientTickCount);
-        }
-
-        if (bufferIdx < cullingBuffer.limit()) {
-            return (cullingBuffer.get(bufferIdx) & 0xFF) > 0;
-        }
-
-        return true;
+        return bufferIdx >= cullingBuffer.limit() || (cullingBuffer.get(bufferIdx) & 0xFF) > 0;
     }
 
     @Override
     public void readData() {
         super.readData();
-        getEntityTable().readUpload();
+        entityMap.readUpload();
     }
 
     public EntityMap getEntityTable() {
@@ -76,16 +69,21 @@ public class EntityCullingMap extends CullingMap {
     @Override
     public void cleanup() {
         super.cleanup();
-        getEntityTable().clear();
+        entityMap.clear();
     }
 
     public static class EntityMap {
         public final LifeTimer<Object> tempObjectTimer = new LifeTimer<>();
-        private final IndexedSet<Object> indexMap = new IndexedSet<>();
-        private HashSet<Object> uploadTemp = new HashSet<>();
-        private HashSet<Object> readTemp = new HashSet<>();
-        private HashMap<Object, Integer> uploadEntity = new HashMap<>();
-        private HashMap<Object, Integer> readEntity = new HashMap<>();
+        private final ObjectLinkedOpenHashSet<Object> indexMap = new ObjectLinkedOpenHashSet<>();
+        private final AttributeWriter attributeWriter = new AttributeWriter();
+        private Object2IntOpenHashMap<Object> uploadEntity = newIndexMap();
+        private Object2IntOpenHashMap<Object> readEntity = newIndexMap();
+
+        private static Object2IntOpenHashMap<Object> newIndexMap() {
+            Object2IntOpenHashMap<Object> map = new Object2IntOpenHashMap<>();
+            map.defaultReturnValue(-1);
+            return map;
+        }
 
         public void addObject(Object obj) {
             if (obj instanceof Entity e && !e.isAlive()) return;
@@ -99,31 +97,23 @@ public class EntityCullingMap extends CullingMap {
 
         public void copyTemp(EntityMap other, int tickCount) {
             other.tempObjectTimer.foreach(o -> addTemp(o, tickCount));
-            this.uploadTemp.addAll(other.uploadTemp);
             this.uploadEntity.putAll(other.uploadEntity);
-            this.readTemp.clear();
-            this.readTemp.addAll(this.uploadTemp);
             this.readEntity.clear();
-            this.readEntity.putAll(this.uploadEntity);
+            this.readEntity.putAll(other.readEntity);
         }
 
         public int getIndex(Object obj) {
-            return readEntity.getOrDefault(obj, -1);
+            return readEntity.getInt(obj);
         }
 
         public void readUpload() {
-            HashSet<Object> tempSet = readTemp;
-            readTemp = uploadTemp;
-            uploadTemp = tempSet;
-            uploadTemp.clear();
-            HashMap<Object, Integer> tempMap = readEntity;
+            Object2IntOpenHashMap<Object> tempMap = readEntity;
             readEntity = uploadEntity;
             uploadEntity = tempMap;
             uploadEntity.clear();
         }
 
         public void clearUpload() {
-            uploadTemp.clear();
             uploadEntity.clear();
         }
 
@@ -142,45 +132,59 @@ public class EntityCullingMap extends CullingMap {
         public void clear() {
             indexMap.clear();
             tempObjectTimer.clear();
-            uploadTemp.clear();
-            readTemp.clear();
             uploadEntity.clear();
             readEntity.clear();
-        }
-
-        private void addAttribute(Consumer<Consumer<FloatBuffer>> consumer, AABB aabb, float inflate, int index) {
-            consumer.accept(buffer -> {
-                buffer.put((float) index);
-                float size = (float) Math.max(aabb.getXsize(), aabb.getZsize());
-                buffer.put(size + 0.5F + inflate);
-                buffer.put((float) aabb.getYsize() + 0.5F + inflate);
-                Vec3 pos = aabb.getCenter();
-                buffer.put((float) pos.x);
-                buffer.put((float) pos.y);
-                buffer.put((float) pos.z);
-            });
         }
 
         public void addEntityAttribute(Consumer<Consumer<FloatBuffer>> consumer) {
             clearUpload();
             int stalenessTicks = CullingStateManager.getKeepAliveTicks();
-            indexMap.forEach((o, index) -> {
+            AttributeWriter writer = attributeWriter;
+            int index = 0;
+            for (Object o : indexMap) {
+                int slot = index++;
                 AABB aabb = ModIntegrationUtil.getObjectAABB(o);
-                if (ModIntegrationUtil.isFiniteAABB(aabb)) {
-                    float inflate = 0.0F;
-                    if (o instanceof Entity e) {
-                        double step = Math.max(Math.abs(e.getX() - e.xOld), Math.max(Math.abs(e.getY() - e.yOld), Math.abs(e.getZ() - e.zOld)));
-                        inflate = (float) Math.min(step * stalenessTicks, 3.0D);
-                    }
-                    addAttribute(consumer, aabb, inflate, index);
-                    uploadTemp.add(o);
-                    uploadEntity.put(o, index);
+                if (!ModIntegrationUtil.isFiniteAABB(aabb)) continue;
+
+                float inflate = 0.0F;
+                if (o instanceof Entity e) {
+                    double step = Math.max(Math.abs(e.getX() - e.xOld), Math.max(Math.abs(e.getY() - e.yOld), Math.abs(e.getZ() - e.zOld)));
+                    inflate = (float) Math.min(step * stalenessTicks, 3.0D);
                 }
-            });
+
+                writer.index = slot;
+                writer.sizeXZ = (float) Math.max(aabb.getXsize(), aabb.getZsize()) + 0.5F + inflate;
+                writer.sizeY = (float) aabb.getYsize() + 0.5F + inflate;
+                writer.centerX = (float) (aabb.minX + 0.5 * (aabb.maxX - aabb.minX));
+                writer.centerY = (float) (aabb.minY + 0.5 * (aabb.maxY - aabb.minY));
+                writer.centerZ = (float) (aabb.minZ + 0.5 * (aabb.maxZ - aabb.minZ));
+                consumer.accept(writer);
+
+                uploadEntity.put(o, slot);
+            }
         }
 
         public int size() {
             return indexMap.size();
+        }
+
+        private static final class AttributeWriter implements Consumer<FloatBuffer> {
+            private float index;
+            private float sizeXZ;
+            private float sizeY;
+            private float centerX;
+            private float centerY;
+            private float centerZ;
+
+            @Override
+            public void accept(FloatBuffer buffer) {
+                buffer.put(index);
+                buffer.put(sizeXZ);
+                buffer.put(sizeY);
+                buffer.put(centerX);
+                buffer.put(centerY);
+                buffer.put(centerZ);
+            }
         }
     }
 }

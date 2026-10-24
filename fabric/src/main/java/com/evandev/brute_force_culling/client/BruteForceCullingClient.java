@@ -3,10 +3,12 @@ package com.evandev.brute_force_culling.client;
 import com.evandev.brute_force_culling.culling.CullingRenderEvent;
 import com.evandev.brute_force_culling.culling.CullingStateManager;
 import com.evandev.brute_force_culling.culling.DebugKeybind;
+import com.evandev.brute_force_culling.culling.VegetationThinning;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.CommonLifecycleEvents;
 
 public class BruteForceCullingClient implements ClientModInitializer {
 
@@ -22,6 +24,7 @@ public class BruteForceCullingClient implements ClientModInitializer {
             }
         });
 
+        CommonLifecycleEvents.TAGS_LOADED.register((registries, client) -> VegetationThinning.forgetVegetation());
         HudRenderCallback.EVENT.register((guiGraphics, tickDelta) -> CullingRenderEvent.renderDebugOverlay(guiGraphics));
     }
 }

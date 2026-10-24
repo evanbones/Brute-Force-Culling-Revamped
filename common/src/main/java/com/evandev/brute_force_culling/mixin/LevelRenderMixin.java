@@ -27,18 +27,26 @@ public abstract class LevelRenderMixin implements IEntitiesForRender {
     private void onApplyFrustumHead(Frustum frustum, CallbackInfo ci) {
         CullingStateManager.applyFrustum = true;
         CullingStateManager.updating();
-        CullingStateManager.beginChunkCullingCount();
     }
 
     @Inject(method = "applyFrustum", at = @At(value = "RETURN"))
     private void onApplyFrustumReturn(Frustum frustum, CallbackInfo ci) {
         CullingStateManager.applyFrustum = false;
-        CullingStateManager.endChunkCullingCount();
     }
 
     @Inject(method = "prepareCullFrustum", at = @At(value = "HEAD"))
     private void onPrepareCullFrustum(Vec3 cameraPosition, Matrix4f frustumMatrix, Matrix4f projectionMatrix, CallbackInfo ci) {
         CullingStateManager.PROJECTION_MATRIX.set(projectionMatrix);
+    }
+
+    @Inject(method = "renderLevel", at = @At(value = "INVOKE_STRING", target = "Lnet/minecraft/util/profiling/ProfilerFiller;popPush(Ljava/lang/String;)V", args = "ldc=captureFrustum"))
+    private void onCaptureFrustum(CallbackInfo ci) {
+        CullingStateManager.onProfilerPopPush("captureFrustum");
+    }
+
+    @Inject(method = "renderLevel", at = @At(value = "INVOKE_STRING", target = "Lnet/minecraft/util/profiling/ProfilerFiller;popPush(Ljava/lang/String;)V", args = "ldc=destroyProgress"))
+    private void onDestroyProgress(CallbackInfo ci) {
+        CullingStateManager.onProfilerPopPush("destroyProgress");
     }
 
     @Inject(method = "allChanged", at = @At(value = "TAIL"))

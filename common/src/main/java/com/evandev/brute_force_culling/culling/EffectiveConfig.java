@@ -24,36 +24,50 @@ public class EffectiveConfig {
         return !loaded || !ModConfig.get().enabled;
     }
 
+    private static boolean cullingOff() {
+        return unload() || CullingStateManager.SHADER_INIT_FAILED;
+    }
+
     public static double getSampling() {
         if (unload()) return 0.5;
         return Math.max(ModConfig.get().sampling, MIN_SAMPLING);
     }
 
     public static boolean doEntityCulling() {
-        if (unload() || !CullingStateManager.gl33()) return false;
+        if (cullingOff() || !CullingStateManager.gl33()) return false;
         return ModConfig.get().cullEntity || ModConfig.get().cullBlockEntity;
     }
 
     public static boolean getCullEntity() {
-        if (unload() || !CullingStateManager.gl33()) return false;
+        if (cullingOff() || !CullingStateManager.gl33()) return false;
         return ModConfig.get().cullEntity;
     }
 
     public static boolean getCullBlockEntity() {
-        if (unload() || !CullingStateManager.gl33()) return false;
+        if (cullingOff() || !CullingStateManager.gl33()) return false;
         return ModConfig.get().cullBlockEntity;
     }
 
+    public static boolean getTickCulling() {
+        if (cullingOff()) return false;
+        return ModConfig.get().tickCulling;
+    }
+
     public static boolean getCullChunk() {
-        if (unload()) return false;
+        if (cullingOff()) return false;
         return ModConfig.get().cullChunk;
     }
 
     public static boolean shouldCullChunk() {
-        if (unload()) return false;
+        if (cullingOff()) return false;
         var chunkCullingMap = CullingStateManager.CHUNK_CULLING_MAP;
         if (chunkCullingMap == null || !chunkCullingMap.isDone() || !chunkCullingMap.hasData()) return false;
         return ModConfig.get().cullChunk;
+    }
+
+    public static int getVegetationThinningRange(int renderDistance) {
+        if (unload() || !ModConfig.get().vegetationThinning) return -1;
+        return Math.max(2, renderDistance * ModConfig.get().vegetationThinningStart / 100);
     }
 
     public static int getShaderDynamicDelay() {

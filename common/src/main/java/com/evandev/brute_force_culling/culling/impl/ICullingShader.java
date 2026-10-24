@@ -3,6 +3,8 @@ package com.evandev.brute_force_culling.culling.impl;
 import com.mojang.blaze3d.shaders.Uniform;
 
 public interface ICullingShader {
+    boolean bruteForceCulling$hasCullingUniforms();
+
     Uniform bruteForceCulling$getRenderDistance();
 
     Uniform bruteForceCulling$getCullingCameraPos();

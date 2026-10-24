@@ -14,12 +14,12 @@ public class DummySection implements IRenderSectionVisibility {
     }
 
     @Override
-    public boolean bruteForceCulling$shouldCheckVisibility(int clientTick) {
-        return true;
+    public boolean bruteForceCulling$isVisibleAtFrame(int frame) {
+        return false;
     }
 
     @Override
-    public void bruteForceCulling$updateVisibleTick(int clientTick) {
+    public void bruteForceCulling$markVisibleAtFrame(int frame) {
     }
 
     @Override

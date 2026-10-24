@@ -17,6 +17,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ShaderInstance.class)
 public abstract class ShaderInstanceMixin implements ICullingShader {
     @Unique
+    private boolean bruteForceCulling$hasCullingUniforms;
+    @Unique
     private Uniform bruteForceCulling$cullingCameraPos;
     @Unique
     private Uniform bruteForceCulling$cullingCameraDir;
@@ -67,6 +69,17 @@ public abstract class ShaderInstanceMixin implements ICullingShader {
         this.bruteForceCulling$frustumPos = this.getUniform("FrustumPos");
         this.bruteForceCulling$cullingViewMat = this.getUniform("CullingViewMat");
         this.bruteForceCulling$cullingProjMat = this.getUniform("CullingProjMat");
+
+        this.bruteForceCulling$hasCullingUniforms = bruteForceCulling$cullingCameraPos != null || bruteForceCulling$cullingCameraDir != null
+                || bruteForceCulling$boxScale != null || bruteForceCulling$renderDistance != null || bruteForceCulling$depthSize != null
+                || bruteForceCulling$cullingSize != null || bruteForceCulling$entityCullingSize != null || bruteForceCulling$levelHeightOffset != null
+                || bruteForceCulling$levelMinSection != null || bruteForceCulling$cullingFrustum != null || bruteForceCulling$frustumPos != null
+                || bruteForceCulling$cullingViewMat != null || bruteForceCulling$cullingProjMat != null;
+    }
+
+    @Override
+    public boolean bruteForceCulling$hasCullingUniforms() {
+        return bruteForceCulling$hasCullingUniforms;
     }
 
     @Override

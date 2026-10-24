@@ -18,10 +18,14 @@ public abstract class SectionCollectorMixin {
 
     @Inject(method = "visit(Lnet/caffeinemc/mods/sodium/client/render/chunk/RenderSection;)V", at = @At("HEAD"), remap = false, cancellable = true)
     private void bruteForceCulling$onVisit(RenderSection section, CallbackInfo ci) {
-        if (CullingStateManager.checkCulling || CullingStateManager.renderingShader()) return;
+        if (CullingStateManager.renderingShader()) return;
         if (!EffectiveConfig.shouldCullChunk()) return;
 
-        if (!CullingStateManager.shouldRenderChunk((IRenderSectionVisibility) section, true)) {
+        boolean culled = !CullingStateManager.shouldRenderChunk((IRenderSectionVisibility) section, true);
+        CullingStateManager.countChunk(culled);
+        // "Show culled objects" inverts the verdict so only the culled sections are drawn.
+        if (culled != CullingStateManager.checkCulling) {
+            // Still visited with no render flags so pending rebuilds of the section get scheduled.
             this.visitWithFlags(section, 0);
             ci.cancel();
         }

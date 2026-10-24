@@ -1,9 +1,9 @@
 package com.evandev.brute_force_culling.culling.impl;
 
 public interface IRenderSectionVisibility {
-    boolean bruteForceCulling$shouldCheckVisibility(int clientTick);
+    boolean bruteForceCulling$isVisibleAtFrame(int frame);
 
-    void bruteForceCulling$updateVisibleTick(int clientTick);
+    void bruteForceCulling$markVisibleAtFrame(int frame);
 
     int bruteForceCulling$getPositionX();
 

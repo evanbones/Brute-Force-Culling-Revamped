@@ -35,7 +35,9 @@ public abstract class FrustumMixin {
                 (int) ((aabb.minZ + aabb.maxZ) * 0.5D)
         );
 
-        if (!CullingStateManager.shouldRenderChunk(section, true)) {
+        boolean culled = !CullingStateManager.shouldRenderChunk(section, true);
+        CullingStateManager.countChunk(culled);
+        if (culled) {
             cir.setReturnValue(false);
         }
     }
