@@ -375,6 +375,7 @@ public class CullingStateManager {
                 checkShader();
             }
             case "destroyProgress" -> {
+                RenderSystem.disableBlend();
                 updatingDepth = true;
                 updateDepthMap();
                 readMapData();
